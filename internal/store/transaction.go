@@ -12,7 +12,7 @@ import (
 type transaction struct{ tx *sql.Tx }
 
 func (s *Store) WithinTransaction(ctx context.Context, fn func(application.Transaction) error) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.handle.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}

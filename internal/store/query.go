@@ -9,10 +9,10 @@ import (
 )
 
 func (s *Store) ViewCase(ctx context.Context, id string) (*domain.RiggingCase, error) {
-	return loadCase(ctx, s.db, id)
+	return loadCase(ctx, s.handle.db, id)
 }
 func (s *Store) ListCases(ctx context.Context) ([]*domain.RiggingCase, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM rigging_cases ORDER BY created_at DESC,id`)
+	rows, err := s.handle.db.QueryContext(ctx, `SELECT id FROM rigging_cases ORDER BY created_at DESC,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (s *Store) ListCases(ctx context.Context) ([]*domain.RiggingCase, error) {
 	return out, nil
 }
 func (s *Store) ListAudit(ctx context.Context, id string) ([]domain.AuditEvent, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT sequence_no,kind,aggregate_version,payload,previous_digest,digest,occurred_at FROM audit_events WHERE case_id=? ORDER BY sequence_no`, id)
+	rows, err := s.handle.db.QueryContext(ctx, `SELECT sequence_no,kind,aggregate_version,payload,previous_digest,digest,occurred_at FROM audit_events WHERE case_id=? ORDER BY sequence_no`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -56,13 +56,13 @@ func (s *Store) ListAudit(ctx context.Context, id string) ([]domain.AuditEvent, 
 	return out, rows.Err()
 }
 func (s *Store) LoadSnapshot(ctx context.Context, id string) ([]byte, *domain.ReleaseCertificate, error) {
-	cert, snapshot, err := loadCertificate(ctx, s.db, id)
+	cert, snapshot, err := loadCertificate(ctx, s.handle.db, id)
 	return snapshot, cert, err
 }
 
 func (s *Store) FindValidationBatch(ctx context.Context, id string) (*domain.ValidationBatch, error) {
 	var caseID string
-	err := s.db.QueryRowContext(ctx, `SELECT case_id FROM validation_batches WHERE id=?`, id).Scan(&caseID)
+	err := s.handle.db.QueryRowContext(ctx, `SELECT case_id FROM validation_batches WHERE id=?`, id).Scan(&caseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, application.NotFound("校验批次不存在")
 	}
@@ -89,13 +89,13 @@ func (s *Store) FindCertificate(ctx context.Context, serial *uint64, certificate
 		query, arg = `SELECT case_id FROM release_certificates WHERE serial=?`, *serial
 	}
 	var caseID string
-	err := s.db.QueryRowContext(ctx, query, arg).Scan(&caseID)
+	err := s.handle.db.QueryRowContext(ctx, query, arg).Scan(&caseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, application.NotFound("放行凭据不存在")
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	cert, snapshot, err := loadCertificate(ctx, s.db, caseID)
+	cert, snapshot, err := loadCertificate(ctx, s.handle.db, caseID)
 	return cert, snapshot, err
 }
