@@ -33,24 +33,69 @@ func (s *Service) ListValidationBatches(ctx context.Context, caseID string, limi
 		return nil, classify(err)
 	}
 	if cached, ok := s.history.Load(caseID); ok && cached.(validationHistoryEntry).version == c.Version {
-		items := cached.(validationHistoryEntry).items
+		items := cloneValidationBatches(cached.(validationHistoryEntry).items)
 		if len(items) > limit {
 			items = items[:limit]
 		}
 		return &ValidationBatchList{Items: items}, nil
 	}
-	items := append([]domain.ValidationBatch(nil), c.ValidationBatches...)
+	items := cloneValidationBatches(c.ValidationBatches)
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].CompletedAt.Equal(items[j].CompletedAt) {
 			return items[i].ID > items[j].ID
 		}
 		return items[i].CompletedAt.After(items[j].CompletedAt)
 	})
-	s.history.Store(caseID, validationHistoryEntry{version: c.Version, items: items})
+	s.history.Store(caseID, validationHistoryEntry{version: c.Version, items: cloneValidationBatches(items)})
 	if len(items) > limit {
 		items = items[:limit]
 	}
 	return &ValidationBatchList{Items: items}, nil
+}
+
+// cloneValidationBatches returns a fully independent copy of the given batches
+// so that nested mutable fields (ChangedRefs, InputRevisions, Issues and
+// Issues[].AffectedRefs) are isolated from the source and from any cached
+// slice. Callers can mutate the returned value without affecting the
+// underlying history or subsequent queries.
+func cloneValidationBatches(in []domain.ValidationBatch) []domain.ValidationBatch {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.ValidationBatch, len(in))
+	for i := range in {
+		b := in[i]
+		b.ChangedRefs = cloneStrings(in[i].ChangedRefs)
+		b.InputRevisions = cloneRevisions(in[i].InputRevisions)
+		b.Issues = make([]domain.ValidationBatchIssue, len(in[i].Issues))
+		for j := range in[i].Issues {
+			issue := in[i].Issues[j]
+			issue.AffectedRefs = cloneStrings(in[i].Issues[j].AffectedRefs)
+			b.Issues[j] = issue
+		}
+		out[i] = b
+	}
+	return out
+}
+
+func cloneStrings(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneRevisions(in map[string]uint32) map[string]uint32 {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]uint32, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func (s *Service) DiffValidationBatches(ctx context.Context, caseID, fromID, toID string) (*ValidationBatchDiff, error) {
