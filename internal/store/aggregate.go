@@ -23,13 +23,22 @@ func optionalTime(t *time.Time) any {
 	}
 	return timeText(*t)
 }
-func parseTime(s string) time.Time { t, _ := time.Parse(time.RFC3339Nano, s); return t }
-func parseOptional(v sql.NullString) *time.Time {
-	if !v.Valid {
-		return nil
+func parseTime(s string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("解析时间 %q 失败: %w", s, err)
 	}
-	t := parseTime(v.String)
-	return &t
+	return t, nil
+}
+func parseOptional(v sql.NullString) (*time.Time, error) {
+	if !v.Valid {
+		return nil, nil
+	}
+	t, err := parseTime(v.String)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 func loadCase(ctx context.Context, q sqlRunner, id string) (*domain.RiggingCase, error) {
 	var c domain.RiggingCase
@@ -42,9 +51,18 @@ func loadCase(ctx context.Context, q sqlRunner, id string) (*domain.RiggingCase,
 	if err != nil {
 		return nil, err
 	}
-	c.ScheduledAt = parseTime(scheduled)
-	c.CreatedAt = parseTime(created)
-	c.ReleasedAt = parseOptional(released)
+	c.ScheduledAt, err = parseTime(scheduled)
+	if err != nil {
+		return nil, fmt.Errorf("读取方案 scheduled_at: %w", err)
+	}
+	c.CreatedAt, err = parseTime(created)
+	if err != nil {
+		return nil, fmt.Errorf("读取方案 created_at: %w", err)
+	}
+	c.ReleasedAt, err = parseOptional(released)
+	if err != nil {
+		return nil, fmt.Errorf("读取方案 released_at: %w", err)
+	}
 	if err = loadPoints(ctx, q, &c); err != nil {
 		return nil, err
 	}
@@ -135,7 +153,10 @@ func loadFindings(ctx context.Context, q sqlRunner, c *domain.RiggingCase) error
 			v := uint32(rev.Int64)
 			f.RemediationRevision = &v
 		}
-		f.ClosedAt = parseOptional(closed)
+		f.ClosedAt, err = parseOptional(closed)
+		if err != nil {
+			return fmt.Errorf("读取问题 closed_at: %w", err)
+		}
 		c.Findings = append(c.Findings, f)
 	}
 	return rows.Err()
@@ -155,8 +176,14 @@ func loadRuns(ctx context.Context, q sqlRunner, c *domain.RiggingCase) error {
 		if err := rows.Scan(&r.ID, &started, &finished, &results, &r.Operator, &r.Outcome); err != nil {
 			return err
 		}
-		r.StartedAt = parseTime(started)
-		r.FinishedAt = parseOptional(finished)
+		r.StartedAt, err = parseTime(started)
+		if err != nil {
+			return fmt.Errorf("读取排练 started_at: %w", err)
+		}
+		r.FinishedAt, err = parseOptional(finished)
+		if err != nil {
+			return fmt.Errorf("读取排练 finished_at: %w", err)
+		}
 		_ = json.Unmarshal([]byte(results), &r.CueResults)
 		c.Rehearsals = append(c.Rehearsals, r)
 	}
@@ -178,7 +205,15 @@ func loadValidationBatches(ctx context.Context, q sqlRunner, c *domain.RiggingCa
 		if err := rows.Scan(&b.ID, &b.AggregateVersion, &started, &completed, &b.FinalStatus, &stale, &refs); err != nil {
 			return err
 		}
-		b.StartedAt, b.CompletedAt, b.Stale = parseTime(started), parseTime(completed), stale != 0
+		b.StartedAt, err = parseTime(started)
+		if err != nil {
+			return fmt.Errorf("读取校验批次 started_at: %w", err)
+		}
+		b.CompletedAt, err = parseTime(completed)
+		if err != nil {
+			return fmt.Errorf("读取校验批次 completed_at: %w", err)
+		}
+		b.Stale = stale != 0
 		_ = json.Unmarshal([]byte(refs), &b.ChangedRefs)
 		b.InputRevisions, b.Issues = map[string]uint32{}, []domain.ValidationBatchIssue{}
 		c.ValidationBatches = append(c.ValidationBatches, b)
@@ -247,7 +282,11 @@ func loadRemediationAttempts(ctx context.Context, q sqlRunner, c *domain.Rigging
 		if err := rows.Scan(&a.ID, &a.FindingID, &revisions, &a.Note, &a.SubmittedBy, &submitted, &a.RecheckType, &input, &passed, &a.Conclusion); err != nil {
 			return err
 		}
-		a.SubmittedAt, a.Passed = parseTime(submitted), passed != 0
+		a.SubmittedAt, err = parseTime(submitted)
+		if err != nil {
+			return fmt.Errorf("读取整改 submitted_at: %w", err)
+		}
+		a.Passed = passed != 0
 		_ = json.Unmarshal([]byte(revisions), &a.ObservedRevisions)
 		if input.Valid {
 			var result domain.CueResult
@@ -338,6 +377,9 @@ func loadCertificate(ctx context.Context, q sqlRunner, id string) (*domain.Relea
 	if err != nil {
 		return nil, nil, fmt.Errorf("读取凭据: %w", err)
 	}
-	c.IssuedAt = parseTime(issued)
+	c.IssuedAt, err = parseTime(issued)
+	if err != nil {
+		return nil, nil, fmt.Errorf("读取凭据 issued_at: %w", err)
+	}
 	return &c, snapshot, nil
 }

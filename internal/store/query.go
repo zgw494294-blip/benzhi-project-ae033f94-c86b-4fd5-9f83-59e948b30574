@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"stage-rigging-clearance/internal/application"
 	"stage-rigging-clearance/internal/domain"
 )
@@ -50,7 +51,11 @@ func (s *Store) ListAudit(ctx context.Context, id string) ([]domain.AuditEvent, 
 		if err := rows.Scan(&e.Sequence, &e.Kind, &e.AggregateVersion, &e.Payload, &e.PreviousDigest, &e.Digest, &at); err != nil {
 			return nil, err
 		}
-		e.OccurredAt = parseTime(at)
+		occurredAt, err := parseTime(at)
+		if err != nil {
+			return nil, fmt.Errorf("读取审计事件 occurred_at: %w", err)
+		}
+		e.OccurredAt = occurredAt
 		out = append(out, e)
 	}
 	return out, rows.Err()
