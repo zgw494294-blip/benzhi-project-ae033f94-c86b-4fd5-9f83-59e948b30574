@@ -55,14 +55,9 @@ func (s *Service) LookupCertificate(ctx context.Context, serial *uint64, certifi
 		report.FirstDamagedSequence = damaged
 	}
 	report.Checks = append(report.Checks, CertificateCheck{"AUDIT_CHAIN", chainValid, checkDetail(chainValid, "完整审计链连续且摘要一致", "审计链首次损坏位置已报告")})
-	anchored := false
-	for _, event := range events {
-		if event.Kind == "CASE_RELEASED" && event.PreviousDigest == cert.AuditHeadDigest {
-			anchored = true
-			break
-		}
-	}
-	report.Checks = append(report.Checks, CertificateCheck{"RELEASE_ANCHOR", anchored, checkDetail(anchored, "CASE_RELEASED 事件锚点一致", "CASE_RELEASED 事件锚点缺失或不一致")})
+	anchorEvent, ambiguous := uniqueReleasedAnchor(events, cert.AuditHeadDigest)
+	releaseAnchored := anchorEvent != nil && !ambiguous && domain.MatchesCertificatePayload(cert, anchorEvent.Payload)
+	report.Checks = append(report.Checks, CertificateCheck{"RELEASE_ANCHOR", releaseAnchored, checkDetail(releaseAnchored, "CASE_RELEASED 事件锚点与凭据载荷一致", "CASE_RELEASED 事件锚点缺失、歧义或凭据载荷不一致")})
 	var frozen domain.FrozenSnapshot
 	versionValid := json.Unmarshal(snapshot, &frozen) == nil && frozen.Version == cert.FrozenVersion
 	report.Checks = append(report.Checks, CertificateCheck{"FROZEN_VERSION", versionValid, checkDetail(versionValid, "凭据版本与冻结快照一致", "凭据版本与冻结快照不一致")})

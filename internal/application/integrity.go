@@ -60,13 +60,8 @@ func (s *Service) VerifyIntegrity(ctx context.Context, caseID string, from int) 
 		}
 		valid := cert != nil && s.digester.SnapshotDigest(snapshot) == cert.SnapshotDigest
 		report.SnapshotValid = &valid
-		anchored := false
-		for _, event := range events {
-			if event.Kind == "CASE_RELEASED" && event.PreviousDigest == cert.AuditHeadDigest {
-				anchored = true
-				break
-			}
-		}
+		anchorEvent, ambiguous := uniqueReleasedAnchor(events, cert.AuditHeadDigest)
+		anchored := anchorEvent != nil && !ambiguous && domain.MatchesCertificatePayload(cert, anchorEvent.Payload)
 		report.CertificateAnchored = &anchored
 	}
 	return report, nil

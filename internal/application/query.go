@@ -80,12 +80,29 @@ func (s *Service) VerifyCertificate(ctx context.Context, id string) (bool, error
 	if !s.verifyTimeline(events) || s.digester.SnapshotDigest(snapshot) != cert.SnapshotDigest {
 		return false, nil
 	}
-	for _, event := range events {
-		if event.Kind == "CASE_RELEASED" {
-			return event.PreviousDigest == cert.AuditHeadDigest, nil
-		}
+	anchorEvent, ambiguous := uniqueReleasedAnchor(events, cert.AuditHeadDigest)
+	if ambiguous || anchorEvent == nil {
+		return false, nil
 	}
-	return false, nil
+	return domain.MatchesCertificatePayload(cert, anchorEvent.Payload), nil
+}
+
+// uniqueReleasedAnchor locates the single CASE_RELEASED audit event anchored at
+// the given head digest.  It returns the event, or nil when no anchor is found,
+// and reports whether more than one matching event makes the anchor ambiguous.
+func uniqueReleasedAnchor(events []domain.AuditEvent, headDigest string) (*domain.AuditEvent, bool) {
+	var anchor *domain.AuditEvent
+	for index := range events {
+		event := &events[index]
+		if event.Kind != "CASE_RELEASED" || event.PreviousDigest != headDigest {
+			continue
+		}
+		if anchor != nil {
+			return nil, true
+		}
+		anchor = event
+	}
+	return anchor, false
 }
 
 func (s *Service) verifyTimeline(events []domain.AuditEvent) bool {

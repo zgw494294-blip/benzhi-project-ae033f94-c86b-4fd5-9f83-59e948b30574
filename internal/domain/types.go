@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type RiggingStatus string
 
@@ -156,4 +159,27 @@ type AuditEvent struct {
 	PreviousDigest   string    `json:"previousDigest"`
 	Digest           string    `json:"digest"`
 	OccurredAt       time.Time `json:"occurredAt"`
+}
+
+// MatchesCertificatePayload reports whether the supplied audit event payload
+// decodes into a release certificate whose signing fields exactly match the
+// provided certificate record.  A payload that fails to decode is treated as a
+// mismatch.  Times are compared with Equal so that the RFC3339Nano
+// round-trips used by the audit log and persistence layer remain stable.
+func MatchesCertificatePayload(cert *ReleaseCertificate, payload []byte) bool {
+	if cert == nil {
+		return false
+	}
+	var decoded ReleaseCertificate
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return false
+	}
+	return decoded.ID == cert.ID &&
+		decoded.CaseID == cert.CaseID &&
+		decoded.Serial == cert.Serial &&
+		decoded.FrozenVersion == cert.FrozenVersion &&
+		decoded.SnapshotDigest == cert.SnapshotDigest &&
+		decoded.AuditHeadDigest == cert.AuditHeadDigest &&
+		decoded.Reviewer == cert.Reviewer &&
+		decoded.IssuedAt.Equal(cert.IssuedAt)
 }
