@@ -39,11 +39,11 @@ func (s *Service) LookupCertificate(ctx context.Context, serial *uint64, certifi
 	if err != nil {
 		return nil, classify(err)
 	}
-	c, err := s.repo.ViewCase(context.WithoutCancel(ctx), cert.CaseID)
+	c, err := s.repo.ViewCase(ctx, cert.CaseID)
 	if err != nil {
 		return nil, classify(err)
 	}
-	events, err := s.repo.ListAudit(context.WithoutCancel(ctx), cert.CaseID)
+	events, err := s.repo.ListAudit(ctx, cert.CaseID)
 	if err != nil {
 		return nil, err
 	}

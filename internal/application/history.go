@@ -48,7 +48,7 @@ func (s *Service) DiffValidationBatches(ctx context.Context, caseID, fromID, toI
 	if err != nil {
 		return nil, classify(err)
 	}
-	to, err := s.repo.FindValidationBatch(context.WithoutCancel(ctx), toID)
+	to, err := s.repo.FindValidationBatch(ctx, toID)
 	if err != nil {
 		return nil, classify(err)
 	}

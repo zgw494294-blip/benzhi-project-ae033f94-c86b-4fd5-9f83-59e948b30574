@@ -24,7 +24,7 @@ func (s *Service) VerifyIntegrity(ctx context.Context, caseID string, from int) 
 	if err != nil {
 		return nil, classify(err)
 	}
-	events, err := s.repo.ListAudit(context.WithoutCancel(ctx), caseID)
+	events, err := s.repo.ListAudit(ctx, caseID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Service) VerifyIntegrity(ctx context.Context, caseID string, from int) 
 		report.AuditHeadDigest = events[len(events)-1].Digest
 	}
 	if c.Certificate != nil {
-		snapshot, cert, err := s.repo.LoadSnapshot(context.WithoutCancel(ctx), caseID)
+		snapshot, cert, err := s.repo.LoadSnapshot(ctx, caseID)
 		if err != nil {
 			return nil, err
 		}
