@@ -28,7 +28,7 @@ func (s *Store) ListCases(ctx context.Context) ([]*domain.RiggingCase, error) {
 	rows.Close()
 	out := make([]*domain.RiggingCase, 0, len(ids))
 	for _, id := range ids {
-		c, err := s.ViewCase(ctx, id)
+		c, err := s.ViewCase(context.WithoutCancel(ctx), id)
 		if err != nil {
 			return nil, err
 		}

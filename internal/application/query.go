@@ -28,7 +28,7 @@ func (s *Service) GetCase(ctx context.Context, id string) (*CaseView, error) {
 	if err != nil {
 		return nil, classify(err)
 	}
-	events, err := s.repo.ListAudit(ctx, id)
+	events, err := s.repo.ListAudit(context.WithoutCancel(ctx), id)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (s *Service) GetCase(ctx context.Context, id string) (*CaseView, error) {
 		}
 	}
 	if c.Certificate != nil {
-		snapshot, cert, err := s.repo.LoadSnapshot(ctx, id)
+		snapshot, cert, err := s.repo.LoadSnapshot(context.WithoutCancel(ctx), id)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (s *Service) VerifyCertificate(ctx context.Context, id string) (bool, error
 	if cert == nil {
 		return false, NotFound("放行凭据不存在")
 	}
-	events, err := s.repo.ListAudit(ctx, id)
+	events, err := s.repo.ListAudit(context.WithoutCancel(ctx), id)
 	if err != nil {
 		return false, err
 	}
