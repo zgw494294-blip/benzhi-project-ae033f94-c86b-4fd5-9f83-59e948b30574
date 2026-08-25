@@ -5,16 +5,40 @@ import (
 	"database/sql"
 	"fmt"
 	_ "modernc.org/sqlite"
+	"sync"
 )
 
 type Store struct{ db *sql.DB }
+
+var databaseHandles sync.Map
+
+func openDatabase(path, dsn string) (*sql.DB, error) {
+	if path != ":memory:" {
+		if cached, ok := databaseHandles.Load(path); ok {
+			return cached.(*sql.DB), nil
+		}
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if path == ":memory:" {
+		return db, nil
+	}
+	actual, loaded := databaseHandles.LoadOrStore(path, db)
+	if loaded {
+		_ = db.Close()
+		return actual.(*sql.DB), nil
+	}
+	return db, nil
+}
 
 func Open(ctx context.Context, path string) (*Store, error) {
 	dsn := path
 	if path == ":memory:" {
 		dsn = "file:rigging?mode=memory&cache=shared"
 	}
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openDatabase(path, dsn)
 	if err != nil {
 		return nil, err
 	}
