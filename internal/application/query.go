@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"stage-rigging-clearance/internal/domain"
+	"sync"
 )
 
 type CaseView struct {
@@ -24,13 +25,25 @@ type RehearsalProgress struct {
 }
 
 func (s *Service) GetCase(ctx context.Context, id string) (*CaseView, error) {
-	c, err := s.repo.ViewCase(ctx, id)
-	if err != nil {
-		return nil, classify(err)
+	var c *domain.RiggingCase
+	var events []domain.AuditEvent
+	var caseErr, auditErr error
+	var reads sync.WaitGroup
+	reads.Add(2)
+	go func() {
+		defer reads.Done()
+		c, caseErr = s.repo.ViewCase(ctx, id)
+	}()
+	go func() {
+		defer reads.Done()
+		events, auditErr = s.repo.ListAudit(ctx, id)
+	}()
+	reads.Wait()
+	if caseErr != nil {
+		return nil, classify(caseErr)
 	}
-	events, err := s.repo.ListAudit(ctx, id)
-	if err != nil {
-		return nil, err
+	if auditErr != nil {
+		return nil, auditErr
 	}
 	v := &CaseView{Case: c, Timeline: events, AuditChainValid: s.verifyTimeline(events)}
 	if len(c.Rehearsals) > 0 {
