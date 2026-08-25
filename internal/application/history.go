@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"stage-rigging-clearance/internal/domain"
+	"sync"
 )
 
 type ValidationBatchList struct {
@@ -44,11 +45,19 @@ func (s *Service) DiffValidationBatches(ctx context.Context, caseID, fromID, toI
 	if fromID == "" || toID == "" || fromID == toID {
 		return nil, Invalid("INVALID_BATCH_RANGE", "必须提供两个不同的校验批次")
 	}
-	from, err := s.repo.FindValidationBatch(ctx, fromID)
-	if err != nil {
-		return nil, classify(err)
-	}
-	to, err := s.repo.FindValidationBatch(ctx, toID)
+	var from, to *domain.ValidationBatch
+	var err error
+	var wait sync.WaitGroup
+	wait.Add(2)
+	go func() {
+		defer wait.Done()
+		from, err = s.repo.FindValidationBatch(ctx, fromID)
+	}()
+	go func() {
+		defer wait.Done()
+		to, err = s.repo.FindValidationBatch(ctx, toID)
+	}()
+	wait.Wait()
 	if err != nil {
 		return nil, classify(err)
 	}
