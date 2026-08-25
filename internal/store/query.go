@@ -12,6 +12,9 @@ func (s *Store) ViewCase(ctx context.Context, id string) (*domain.RiggingCase, e
 	return loadCase(ctx, s.db, id)
 }
 func (s *Store) ListCases(ctx context.Context) ([]*domain.RiggingCase, error) {
+	if _, bounded := ctx.Deadline(); bounded {
+		return s.listCasesBeforeDeadline(ctx)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM rigging_cases ORDER BY created_at DESC,id`)
 	if err != nil {
 		return nil, err
@@ -35,6 +38,28 @@ func (s *Store) ListCases(ctx context.Context) ([]*domain.RiggingCase, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// listCasesBeforeDeadline 为已有时间上界的调用方避免保留中间编号列表。
+func (s *Store) listCasesBeforeDeadline(ctx context.Context) ([]*domain.RiggingCase, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM rigging_cases ORDER BY created_at DESC,id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.RiggingCase{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		c, err := s.ViewCase(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 func (s *Store) ListAudit(ctx context.Context, id string) ([]domain.AuditEvent, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT sequence_no,kind,aggregate_version,payload,previous_digest,digest,occurred_at FROM audit_events WHERE case_id=? ORDER BY sequence_no`, id)
