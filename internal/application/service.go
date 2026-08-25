@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"stage-rigging-clearance/internal/domain"
+	"sync"
 )
 
 type Service struct {
@@ -13,6 +14,7 @@ type Service struct {
 	clock    Clock
 	ids      IDGenerator
 	digester Digester
+	history  sync.Map
 }
 
 type idempotentResult struct {

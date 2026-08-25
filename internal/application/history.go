@@ -19,6 +19,11 @@ type ValidationBatchDiff struct {
 	ResolvedIdentities   []string `json:"resolvedIdentities"`
 }
 
+type validationHistoryEntry struct {
+	version uint64
+	items   []domain.ValidationBatch
+}
+
 func (s *Service) ListValidationBatches(ctx context.Context, caseID string, limit int) (*ValidationBatchList, error) {
 	if limit <= 0 || limit > 100 {
 		return nil, Invalid("INVALID_RANGE", "limit 必须在 1 至 100 之间")
@@ -27,6 +32,13 @@ func (s *Service) ListValidationBatches(ctx context.Context, caseID string, limi
 	if err != nil {
 		return nil, classify(err)
 	}
+	if cached, ok := s.history.Load(caseID); ok && cached.(validationHistoryEntry).version == c.Version {
+		items := cached.(validationHistoryEntry).items
+		if len(items) > limit {
+			items = items[:limit]
+		}
+		return &ValidationBatchList{Items: items}, nil
+	}
 	items := append([]domain.ValidationBatch(nil), c.ValidationBatches...)
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].CompletedAt.Equal(items[j].CompletedAt) {
@@ -34,6 +46,7 @@ func (s *Service) ListValidationBatches(ctx context.Context, caseID string, limi
 		}
 		return items[i].CompletedAt.After(items[j].CompletedAt)
 	})
+	s.history.Store(caseID, validationHistoryEntry{version: c.Version, items: items})
 	if len(items) > limit {
 		items = items[:limit]
 	}
