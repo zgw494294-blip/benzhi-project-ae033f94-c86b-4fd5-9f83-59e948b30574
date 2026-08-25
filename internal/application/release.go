@@ -17,6 +17,8 @@ func (s *Service) Release(ctx context.Context, caseID string, in ReleaseInput) (
 	}
 	var result *domain.RiggingCase
 	var committedConflict error
+	var releaseEventPayload []byte
+	var appendReleaseEvent bool
 	fingerprint := s.fingerprint(in)
 	err := s.repo.WithinTransaction(ctx, func(tx Transaction) error {
 		if raw, ok, err := tx.GetIdempotency(ctx, caseID, in.IdempotencyKey); err != nil {
@@ -79,10 +81,8 @@ func (s *Service) Release(ctx context.Context, caseID string, in ReleaseInput) (
 		if err := tx.SaveCertificate(ctx, cert, snapshot); err != nil {
 			return err
 		}
-		payload, _ := json.Marshal(cert)
-		if err := s.appendEvent(ctx, tx, c, "CASE_RELEASED", payload); err != nil {
-			return err
-		}
+		releaseEventPayload, _ = json.Marshal(cert)
+		appendReleaseEvent = true
 		raw, _ := json.Marshal(idempotentResult{Operation: "CASE_RELEASED", Fingerprint: fingerprint, Case: c})
 		if err := tx.PutIdempotency(ctx, caseID, in.IdempotencyKey, raw); err != nil {
 			return err
@@ -95,6 +95,13 @@ func (s *Service) Release(ctx context.Context, caseID string, in ReleaseInput) (
 	}
 	if committedConflict != nil {
 		return nil, committedConflict
+	}
+	if appendReleaseEvent {
+		if err := s.repo.WithinTransaction(ctx, func(tx Transaction) error {
+			return s.appendEvent(ctx, tx, result, "CASE_RELEASED", releaseEventPayload)
+		}); err != nil {
+			return nil, classify(err)
+		}
 	}
 	return result, nil
 }
